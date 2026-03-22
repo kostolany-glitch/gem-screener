@@ -260,6 +260,69 @@ def build_card_near(row, COL):
              int(row["tech_score"]), int(row["chip_score"]),
              render_tech(row), render_chip(row), f60, f5, gaps)
 
+
+# ══════════════════════════════════════════════
+# 產生 Claude 分析用摘要文字
+# ══════════════════════════════════════════════
+
+def build_claude_summary(rows_df, COL, label="雙達標"):
+    """
+    將篩選結果整理成結構化純文字，供複製給 Claude 二次分析用。
+    格式設計原則：每個欄位獨立一行、數字直接標示、無歧義。
+    """
+    if len(rows_df) == 0:
+        return f"本次無{label}標的。"
+
+    lines = []
+    lines.append("═══════════════════════════════")
+    lines.append(f"GEM 台股篩選結果 — {label}")
+    lines.append(f"共 {len(rows_df)} 檔")
+    lines.append("═══════════════════════════════")
+    lines.append("")
+    lines.append("【篩選框架說明】")
+    lines.append("第一層：PER 0~50、累月營收年增>5億、5日均量>500張")
+    lines.append("第二層技術：T1乖離-5~+10%、T2 RSI12 50~70、T3 OSC正且↗（≥2項）")
+    lines.append("第二層籌碼：C1外資連買≥2日+1、C2三大法人買超+1、")
+    lines.append("           C3融資60日+5日均減+2/擇一+1、C4券資比<3%+1（≥3分）")
+    lines.append("")
+
+    for i, (_, row) in enumerate(rows_df.iterrows(), 1):
+        code = str(row[COL["代號"]]).replace('="','').replace('"','')
+        cyc  = "是" if row["景氣循環"] else "否"
+        f60  = "負（淨減少）" if pd.notna(row["_f60"]) and row["_f60"] < 0 else "正（淨增加）"
+        f5   = "{:+,}".format(int(row["_f5"])) if pd.notna(row["_f5"]) else "N/A"
+        t1   = "✓ 達標" if row["T1"] else "✗ 未達"
+        t2   = "✓ 達標" if row["T2"] else "✗ 未達"
+        t3   = "✓ 達標" if row["T3"] else "✗ 未達"
+
+        lines.append("───────────────────────────────")
+        lines.append(f"【標的 {i}】{row[COL['名稱']]}（{code}）｜{row[COL['產業別']]}")
+        lines.append(f"景氣循環股警示：{cyc}")
+        lines.append("")
+        lines.append("▍基本面")
+        lines.append(f"  PER：{row['_per']:.1f}")
+        lines.append(f"  累月營收年增：+{row['_rev']:.1f} 億")
+        lines.append("")
+        lines.append("▍技術面（達標 {}/3）".format(int(row["tech_score"])))
+        lines.append(f"  T1 20日乖離：{row['_bias']:.2f}%　{t1}（門檻：-5%~+10%）")
+        lines.append(f"  T2 RSI12日線：{row['_rsi']:.1f}　{t2}（門檻：50~70）")
+        lines.append(f"  T3 OSC日線：{row['_osc']:.2f}　{t3}（需為正且↗）")
+        lines.append("")
+        lines.append("▍籌碼面（總分 {}/5）".format(int(row["chip_score"])))
+        lines.append(f"  C1 外資連買動能：+{int(row['C1'])}（外資連買日數：{int(row['_frgn'])}日）")
+        lines.append(f"  C2 三大法人前5日：+{int(row['C2'])}（買賣超：{'+' if row['_inst']>0 else ''}{int(row['_inst'])}張）")
+        lines.append(f"  C3 融資乾淨度：+{int(row['C3'])}（前60日：{f60}、前5日：{f5}張）")
+        lines.append(f"  C4 券資比：+{int(row['C4'])}（券資比：{row['_qr']:.2f}%）")
+        lines.append("")
+
+    lines.append("═══════════════════════════════")
+    lines.append("請根據以上數據，針對每檔標的提供：")
+    lines.append("1. 進場理由摘要（技術面＋籌碼面綜合判斷）")
+    lines.append("2. 主要風險提示（含景氣循環股警示如適用）")
+    lines.append("3. 需等待條件（如為接近門檻標的）")
+    lines.append("═══════════════════════════════")
+
+    return "\n".join(lines)
 # ── 主畫面 ──
 st.markdown(
     '<div class="gem-header">'
@@ -388,66 +451,3 @@ with tab4:
             unsafe_allow_html=True)
     st.markdown('<div class="info-box" style="margin-top:1rem">本版本已移除董監持股條件，原因：董監持股與成長股邏輯相關性弱，且易誤殺外資偏好的分散持股標的。</div>', unsafe_allow_html=True)
 
-
-# ══════════════════════════════════════════════
-# 產生 Claude 分析用摘要文字
-# ══════════════════════════════════════════════
-
-def build_claude_summary(rows_df, COL, label="雙達標"):
-    """
-    將篩選結果整理成結構化純文字，供複製給 Claude 二次分析用。
-    格式設計原則：每個欄位獨立一行、數字直接標示、無歧義。
-    """
-    if len(rows_df) == 0:
-        return f"本次無{label}標的。"
-
-    lines = []
-    lines.append("═══════════════════════════════")
-    lines.append(f"GEM 台股篩選結果 — {label}")
-    lines.append(f"共 {len(rows_df)} 檔")
-    lines.append("═══════════════════════════════")
-    lines.append("")
-    lines.append("【篩選框架說明】")
-    lines.append("第一層：PER 0~50、累月營收年增>5億、5日均量>500張")
-    lines.append("第二層技術：T1乖離-5~+10%、T2 RSI12 50~70、T3 OSC正且↗（≥2項）")
-    lines.append("第二層籌碼：C1外資連買≥2日+1、C2三大法人買超+1、")
-    lines.append("           C3融資60日+5日均減+2/擇一+1、C4券資比<3%+1（≥3分）")
-    lines.append("")
-
-    for i, (_, row) in enumerate(rows_df.iterrows(), 1):
-        code = str(row[COL["代號"]]).replace('="','').replace('"','')
-        cyc  = "是" if row["景氣循環"] else "否"
-        f60  = "負（淨減少）" if pd.notna(row["_f60"]) and row["_f60"] < 0 else "正（淨增加）"
-        f5   = "{:+,}".format(int(row["_f5"])) if pd.notna(row["_f5"]) else "N/A"
-        t1   = "✓ 達標" if row["T1"] else "✗ 未達"
-        t2   = "✓ 達標" if row["T2"] else "✗ 未達"
-        t3   = "✓ 達標" if row["T3"] else "✗ 未達"
-
-        lines.append("───────────────────────────────")
-        lines.append(f"【標的 {i}】{row[COL['名稱']]}（{code}）｜{row[COL['產業別']]}")
-        lines.append(f"景氣循環股警示：{cyc}")
-        lines.append("")
-        lines.append("▍基本面")
-        lines.append(f"  PER：{row['_per']:.1f}")
-        lines.append(f"  累月營收年增：+{row['_rev']:.1f} 億")
-        lines.append("")
-        lines.append("▍技術面（達標 {}/3）".format(int(row["tech_score"])))
-        lines.append(f"  T1 20日乖離：{row['_bias']:.2f}%　{t1}（門檻：-5%~+10%）")
-        lines.append(f"  T2 RSI12日線：{row['_rsi']:.1f}　{t2}（門檻：50~70）")
-        lines.append(f"  T3 OSC日線：{row['_osc']:.2f}　{t3}（需為正且↗）")
-        lines.append("")
-        lines.append("▍籌碼面（總分 {}/5）".format(int(row["chip_score"])))
-        lines.append(f"  C1 外資連買動能：+{int(row['C1'])}（外資連買日數：{int(row['_frgn'])}日）")
-        lines.append(f"  C2 三大法人前5日：+{int(row['C2'])}（買賣超：{'+' if row['_inst']>0 else ''}{int(row['_inst'])}張）")
-        lines.append(f"  C3 融資乾淨度：+{int(row['C3'])}（前60日：{f60}、前5日：{f5}張）")
-        lines.append(f"  C4 券資比：+{int(row['C4'])}（券資比：{row['_qr']:.2f}%）")
-        lines.append("")
-
-    lines.append("═══════════════════════════════")
-    lines.append("請根據以上數據，針對每檔標的提供：")
-    lines.append("1. 進場理由摘要（技術面＋籌碼面綜合判斷）")
-    lines.append("2. 主要風險提示（含景氣循環股警示如適用）")
-    lines.append("3. 需等待條件（如為接近門檻標的）")
-    lines.append("═══════════════════════════════")
-
-    return "\n".join(lines)
